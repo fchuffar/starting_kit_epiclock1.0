@@ -16,5 +16,5 @@ An extented starting kit including a guided report there: https://github.com/fch
 
 We hope you will enjoy the challenge.
 
---<br>
+--<br/>
 The epiclock1.0 Challenge Team
