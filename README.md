@@ -12,7 +12,7 @@ The challenge provides 2 data.frames (data_test and data_train, see below) corre
 
 Secret URL is: https://www.codabench.org/competitions/1692/?secret_key=439a40e9-9de7-4336-918f-ac983d5dd22c
 
-An extented starting kit including a guided report there: https://github.com/fchuffar/starting_kit_epiclock1
+An extented starting kit including a guided report there: https://github.com/fchuffar/starting_kit_epiclock1.0
 
 We hope you will enjoy the challenge.
 
