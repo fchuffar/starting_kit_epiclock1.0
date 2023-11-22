@@ -86,9 +86,8 @@ program <- function(data_train, data_test) {
     ## 
     
     # use more represented categorie as model (NULL model)
-    age = mean(data_train$age)
-    data_pred = rep(age, nrow(data_test))
-    
+    m = lm(age~1, data_train)
+    data_pred = predict(m, data_test)    
     ##
     ## YOUR CODE ENDS HERE
     ##
@@ -162,7 +161,7 @@ write.table(
 
 
 ## we create the associated zip file :
-zip_results <- paste0("submissions", .Platform$file.sep, "results_", format(x = Sys.time( ), format = "%Y_%m_%d_%S"), ".zip")
+zip_results <- paste0("submissions", .Platform$file.sep, "results_", format(x = Sys.time( ), format = "%Y_%m_%d_%H_%M_%S"), ".zip")
 zip::zipr(
          zipfile = zip_results
        , files   = paste0("submissions", .Platform$file.sep, c("results.txt") )
