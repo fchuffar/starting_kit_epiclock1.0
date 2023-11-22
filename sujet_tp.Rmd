@@ -1,5 +1,5 @@
 ---
-title: "Gene Expression Prediction Challenge 3.0 (expred3.0)"
+title: "Chronological age Prediction Challenge 1.0 (epiclock1.0)"
 subtitle: "Compte-rendu à compléter"
 author: "Florent Chuffart"
 date: "`r Sys.Date()`"
@@ -17,13 +17,12 @@ knitr::opts_chunk$set(collapse=TRUE, comment = "#>", fig.width=9, fig.height=6, 
 
 Ce document propose deux méthodes pour résoudre le *data challenge* `expred3.0` disponible ici : 
 
-https://codalab.lisn.upsaclay.fr/competitions/8696?secret_key=3f32bbfc-9942-4e60-b241-bd10300d1bce
-
+https://www.codabench.org/competitions/1692/?secret_key=439a40e9-9de7-4336-918f-ac983d5dd22c
 
 L’**objectif** est double : 
 
-1. on cherche à expliquer l’expression du gène ALS2 dans le jeu de données `data_train` ;
-2. pour prédire les valeurs d’expression du gène ALS2 dans le jeu de données `data_test`.
+1. on cherche à expliquer l’expression du gène age dans le jeu de données `data_train` ;
+2. pour prédire les valeurs d’expression du gène age dans le jeu de données `data_test`.
 
 Dans ce document nous allons essentiellement travailler du le jeu de données d’apprentissage `data_train`.
 
@@ -49,11 +48,11 @@ head(data_train[,4:9])
 head(data_train[,1004:1009])
 ```
 
-**Distribution de l’expression de ALS2 dans `data_train`**
+**Distribution de l’age dans `data_train`**
 
 ```{r distr_als2, echo=TRUE, results="verbatim"}
 layout(matrix(1:2, 1), respect=TRUE)
-plot(density(data_train$ALS2))
+plot(density(data_train$age))
 ```
 
 **Distribution du transcriptome et du méthylome dans `data_train`**
@@ -75,28 +74,28 @@ Nous considérerons que la distribution de l’expression de chaque gène est **
 # Méthode SIS
 
 La method SIS [Shurely Independant Screening, Zhang HH. J R Stat Soc Series B Stat Methodol. 2008] appliquée au *transcriptome* (définir) consiste à 
-i) réaliser autant de regressions linéaires simples du type $ALS2 \sim gene$ qu’il y a de gènes ; 
-ii) selectionner les gènes correspondant aux meilleurs modèles ($gene_1, gene_2, gene_3 ...$) ; 
-iii) considérer le modèle linéaire multivarié $ALS2 \sim gene_1 + gene_2 + gene_3 + ...$
+i) réaliser autant de regressions linéaires simples du type $age \sim probe$ qu’il y a de gènes ; 
+ii) selectionner les gènes correspondant aux meilleurs modèles ($probe_1, probe_2, probe_3 ...$) ; 
+iii) considérer le modèle linéaire multivarié $age \sim probe_1 + probe_2 + probe_3 + ...$
 
 
 1. Corrigez le code suivant pour répondre aux attentes énoncées : 
 
 ```{r screening, echo=TRUE, results="verbatim"}
 siscreening = function(data_train) {
-  gs = colnames(data_train)[5:1003]
+  probes = colnames(data_train)[3:2500] # to be update
   pval_fisher = c()
   beta = c()
   r2 = c()
-  for (g in gs) {
-    m = lm(data_train[,"ALS2"]~1)       # to be update
+  for (p in probes) {
+    m = lm(data_train[,"age"]~1)        # to be update
     pval_fisher = c(pval_fisher, 1)     # to be update, tips: look at anova(m)[,]
     beta = c(beta, m$coefficients[[1]]) # to be update
     r2 = c(r2, summary(m)$r.squared)
   }
-  names(pval_fisher)  = gs
-  names(beta)         = gs  
-  names(r2)           = gs  
+  names(pval_fisher)  = probes
+  names(beta)         = probes  
+  names(r2)           = probes  
   return(data.frame(pval_fisher=pval_fisher, beta=beta, r2=r2))
 }
 
@@ -120,25 +119,25 @@ plot(sis_res$r2, -log10(sis_res$pval))
 4. Commentez le code et le graphique suivant : 
 
 ```{r sis_1, echo=TRUE, results="verbatim"}
-m = lm(ALS2~RGS7BP, data_train)
+m = lm(age~cg00329615, data_train)
 layout(matrix(1:2, 1), respect=TRUE)
-plot(data_train[,"RGS7BP"],data_train[,"ALS2"], main=paste0("ALS2~RGS7BP R^2: ", signif(summary(m)$r.squared, 3)))
+plot(data_train[,"cg00329615"],data_train[,"age"], main=paste0("age~cg00329615 R^2: ", signif(summary(m)$r.squared, 3)))
 abline(m,col="red")
 ```
 
 
 5. Construisez un modèle avec les $8$ meilleurs candidats obtenus par SIS (les $R^2$ les plus petits). Calculez le $R^2$ de ce modèle.
 
-```{r pairs8_sis, fig.height=9, echo=TRUE, results="verbatim"}
-sis_genes = rownames(sis_res)[order(sis_res$pval_fisher)]
-head(sis_res,8)
+```{r head8_sis, fig.height=9, echo=TRUE, results="verbatim"}
+sis_probes = rownames(sis_res)[order(sis_res$pval_fisher)]
+head(sis_probes,8)
 ```
 
 
 6. Utilisez la fonction `pairs` et tracez les correlations2 à 2 des 8 meilleurs obtenus avec la méthode SIS. Commentez
 
 ```{r pairs8_sis, fig.height=9, echo=TRUE, results="verbatim"}
-pairs(data_train[,sis_genes[1:8]], main="pair_plot")
+pairs(data_train[,sis_probes[1:8]], main="pair_plot")
 ```
 
 7. Analysez la fonction suivante. Que fait-elle ? Quelles valeurs peuvent prendre l’argument `i` ?
@@ -148,9 +147,9 @@ model_sis_i = function(data_train, i, screening_func=siscreening) {
   print(paste0("model SIS ", i))
   # independant screening on train
   sis_res = screening_func(data_train)
-  sis_genes = rownames(sis_res)[order(sis_res$pval_fisher)]
+  sis_probes = rownames(sis_res)[order(sis_res$pval_fisher)]
   # build model
-  formula = as.formula(paste0(c("ALS2~1",sis_genes[0:i]),collapse="+"))
+  formula = as.formula(paste0(c("age~gender",sis_probes[0:i]),collapse="+"))
   m = lm(formula, data_train)
   return(m)
 }
@@ -176,26 +175,26 @@ for (i in 0:50) {
 Nous venons de voir que tous les gènes n’apportent pas la même quantité d’information "nouvelle". Nous allons tirer partie de la méthode de sélection variables *step forward* pour sélectionner les gènes qui apportent de l’information "nouvelle". En effet, nous allons partir du modèle nul et ajouter un à un les gènes, parmi les 50 meilleurs gênes obtenu grace à la méthode SIS, qui augmentent considérablement la qualité du modèle.
 
 
-1. Analyser le code suivant. Que fait la fontion `step` ? Que contient la variable retournée `step_genes` ?
+1. Analyser le code suivant. Que fait la fontion `step` ? Que contient la variable retournée `step_probes` ?
 
 ```{r step_model, echo=TRUE, results="hide"}
-stepforward = function(data_train, sis_genes, nb_sis_genes=50, trace=0, k=2) {
-  m_lo = lm(ALS2 ~ 1, data=data_train[,c("ALS2", sis_genes[1:nb_sis_genes])])
-  m_up = lm(ALS2 ~ ., data=data_train[,c("ALS2", sis_genes[1:nb_sis_genes])])
+stepforward = function(data_train, sis_probes, nb_sis_probes=50, trace=0, k=2) {
+  m_lo = lm(age ~ 1, data=data_train[,c("age", sis_probes[1:nb_sis_probes])])
+  m_up = lm(age ~ ., data=data_train[,c("age", sis_probes[1:nb_sis_probes])])
   m_fwd = step(m_lo, method="forward", scope=list(upper=m_up,lower=m_lo), trace=trace, k=k)  
   # print(m_fwd$call)
-  step_genes = names(m_fwd$coefficients)[-1]
+  step_probes = names(m_fwd$coefficients)[-1]
 }
 
-step_genes = stepforward(data_train, sis_genes, trace=1)
-step_genes
+step_probes = stepforward(data_train, sis_probes, trace=1)
+step_probes
 ```
 
 2. Utilisez la fonction `pairs` popurt tracer les correlations2 à 2 des 8 meilleurs obtenus avec la méthode `step`.
 
-```{r volcano2, echo=TRUE, results="verbatim", fig.height=9}
+```{r pairs2, echo=TRUE, results="verbatim", fig.height=9}
 layout(1, respect=TRUE)
-pairs(data_train[,step_genes[1:8]], main="pair_plot")
+pairs(data_train[,step_probes[1:8]], main="pair_plot")
 ```
 
 3. Affichez sur le volcano plot du screening indépendant les génes selectionné par `stepforward`. Commentez.
@@ -203,7 +202,7 @@ pairs(data_train[,step_genes[1:8]], main="pair_plot")
 ```{r volcano2, echo=TRUE, results="verbatim"}
 layout(matrix(1:2, 1), respect=TRUE)
 plot(sis_res$beta, -log10(sis_res$pval))
-idx = step_genes
+idx = step_probes
 text(sis_res[idx,]$beta, -log10(sis_res[idx,]$pval), idx, col=2)
 ```
 
@@ -215,11 +214,11 @@ model_stp_i = function(data_train, i, step_func=stepforward) {
   print(paste0("model step ", i))
   # independant screening on train
   sis_res = msiscreening(data_train)
-  sis_genes = rownames(sis_res)[order(sis_res$pval_fisher)]
+  sis_probes = rownames(sis_res)[order(sis_res$pval_fisher)]
   # step
-  step_genes = step_func(data_train, sis_genes, trace=0, k=0)
+  step_probes = step_func(data_train, sis_probes, trace=0, k=0)
   # build model
-  formula = as.formula(paste0(c("ALS2~1",step_genes[0:i]),collapse="+"))
+  formula = as.formula(paste0(c("age~1",step_probes[0:i]),collapse="+"))
   m = lm(formula, data_train)
   return(m)
 }
