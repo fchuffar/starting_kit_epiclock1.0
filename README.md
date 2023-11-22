@@ -1,6 +1,4 @@
-# starting_kit_epiclock1.0
-
-
+# Chronological age Prediction Challenge 1.0 (epiclock1.0)
 
 Hi Dears,
 
