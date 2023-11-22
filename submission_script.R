@@ -86,8 +86,8 @@ program <- function(data_train, data_test) {
     ## 
     
     # use more represented categorie as model (NULL model)
-    status = rev(names(sort(table(data_train$smoking_status))))[1]
-    data_pred = rep(status, nrow(data_test))
+    age = mean(data_train$age)
+    data_pred = rep(age, nrow(data_test))
     
     ##
     ## YOUR CODE ENDS HERE
@@ -129,7 +129,7 @@ cat(
 )
 
 # we create the associated zip file :
-zip_program <- paste0("submissions", .Platform$file.sep, "program_", format(x = Sys.time( ), format = "%Y_%m_%d_%S"), ".zip")
+zip_program <- paste0("submissions", .Platform$file.sep, "program_", format(x = Sys.time( ), format = "%Y_%m_%d_%H_%M_%S"), ".zip")
 zip::zipr(
          zipfile = zip_program
        , files   = paste0("submissions", .Platform$file.sep, c("program.R", "metadata") )
