@@ -8,9 +8,9 @@ This challenge aims to use statistical or machine learning models (e.g. linear m
 
 The challenge provides 2 data.frames (data_test and data_train, see below) corresponding to blood samples described by age, sex DNA methylation values. The goal of this challenge is to predict the age of patients. The methylation values are beta value (0<=beta<=1).
 
-Secret URL is: https://www.codabench.org/competitions/1692/?secret_key=439a40e9-9de7-4336-918f-ac983d5dd22c
+The challenge is orchestrated by the Codabench platform, secret URL is: https://www.codabench.org/competitions/1692/?secret_key=439a40e9-9de7-4336-918f-ac983d5dd22c
 
-An extented starting kit including a guided report there: https://github.com/fchuffar/starting_kit_epiclock1.0
+A presentation is also available there: https://youtu.be/TCeBoQ7DvwA
 
 We hope you will enjoy the challenge.
 
