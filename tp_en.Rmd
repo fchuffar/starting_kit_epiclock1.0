@@ -1,0 +1,337 @@
+---
+title: "Chronological age Prediction Challenge 1.0 (epiclock1.0)"
+subtitle: "Report to complete"
+author: "Florent Chuffart"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r, echo=FALSE, eval=TRUE}
+knitr::opts_chunk$set(collapse=TRUE, comment = "#>", fig.width=9, fig.height=6, eval=TRUE, echo=FALSE, results="hide")
+msiscreening = memoise::memoise(siscreening)
+``` 
+
+This document presents two methods to solve the *data challenge* `expred3.0`, available here: 
+
+https://www.codabench.org/competitions/1692/?secret_key=439a40e9-9de7-4336-918f-ac983d5dd22c
+
+The **goal** is twofold: 
+
+1. to explain the age of the individuals in the `data_train` dataset;
+2. to predict the age of the individuals in the `data_test` dataset.
+
+In this document we will mainly work on the training dataset `data_train`.
+
+We will define two methods: the first is based on the *Sure Independence Screening* method, the second on the *step forward* variable selection method.
+
+We will implement a cross-validation strategy to set the hyper-parameters of these two methods.
+
+Finally, we will compare the results obtained on the training dataset by cross-validation with those obtained online on the test dataset.
+
+# Descriptive statistics
+
+**The `data_train` dataset**
+
+```{r loading_data, echo=TRUE, results="verbatim"}
+data_train = readRDS(file = "data_train.rds")
+data_test = readRDS(file = "data_test.rds")
+dim(data_train)
+dim(data_test)
+head(data_train[,1:6])
+table(data_train$sex)
+table(data_train$histology)
+head(data_train[,4:9])
+head(data_train[,1004:1009])
+```
+
+**Distribution of age in `data_train`**
+
+```{r distr_als2, echo=TRUE, results="verbatim"}
+layout(matrix(1:2, 1), respect=TRUE)
+plot(density(data_train$age))
+```
+
+**Distribution of the methylome in `data_train`**
+
+```{r distr_data_rain, echo=TRUE, results="verbatim"}
+layout(matrix(1:2, 1), respect=TRUE)
+plot(density(as.matrix(data_train[,3:10002])), main="Methylome")
+```
+
+We will assume that the distribution of the value of each probe is **Gaussian**.
+
+
+# SIS method
+
+The SIS method [Sure Independence Screening, Zhang HH. J R Stat Soc Series B Stat Methodol. 2008] applied to the *methylome* (define) consists in: 
+i) fitting as many simple linear regressions of the form $age \sim probe$ as there are probes; 
+ii) selecting the probes corresponding to the best models ($probe_1, probe_2, probe_3 ...$); 
+iii) considering the multivariate linear model $age \sim probe_1 + probe_2 + probe_3 + ...$
+
+
+1. Fix the following code to meet the expectations described above: 
+
+```{r screening, echo=TRUE, results="verbatim"}
+siscreening = function(data_train) {
+  probes = colnames(data_train)[3:2500] # to be update
+  pval_fisher = c()
+  beta = c()
+  r2 = c()
+  for (p in probes) {
+    m = lm(data_train[,"age"]~1)        # to be update
+    pval_fisher = c(pval_fisher, 1)     # to be update, tips: look at anova(m)[,]
+    beta = c(beta, m$coefficients[[1]]) # to be update
+    r2 = c(r2, summary(m)$r.squared)
+  }
+  names(pval_fisher)  = probes
+  names(beta)         = probes  
+  names(r2)           = probes  
+  return(data.frame(pval_fisher=pval_fisher, beta=beta, r2=r2))
+}
+
+sis_res = siscreening(data_train)  
+head(sis_res)
+```
+
+2. Draw the **volcano plot** corresponding to the screening: the x-axis shows the beta of each independent model and the y-axis the corresponding $-log10(pval_{fisher})$. Remember to add titles. Comment.
+
+
+3. Plot the $R^2$ of each independent model on the x-axis and the corresponding $-log10(pval_{fisher})$ on the y-axis. Remember to add titles. Comment.
+
+```{r volcano1, echo=TRUE, results="verbatim"}
+layout(matrix(1:2, 1), respect=TRUE)
+plot(sis_res$beta, -log10(sis_res$pval), main="Volcano plot")
+# idx = -log10(sis_res$pval) > 30
+# text(sis_res[idx,]$beta, -log10(sis_res[idx,]$pval), rownames(sis_res)[idx], col=2)
+plot(sis_res$r2, -log10(sis_res$pval))                  
+```
+
+4. Comment on the following code and plot: 
+
+```{r sis_1, echo=TRUE, results="verbatim"}
+m = lm(age~cg00329615, data_train)
+layout(matrix(1:2, 1), respect=TRUE)
+plot(data_train[,"cg00329615"],data_train[,"age"], main=paste0("age~cg00329615 R^2: ", signif(summary(m)$r.squared, 3)))
+abline(m,col="red")
+```
+
+
+5. Build a model with the $8$ best candidates obtained by SIS (the smallest $R^2$). Compute the $R^2$ of this model.
+
+```{r head8_sis, fig.height=9, echo=TRUE, results="verbatim"}
+sis_probes = rownames(sis_res)[order(sis_res$pval_fisher)]
+head(sis_probes,8)
+```
+
+
+6. Use the `pairs` function to plot the pairwise correlations of the 8 best probes obtained with the SIS method. Comment.
+
+```{r pairs8_sis, fig.height=9, echo=TRUE, results="verbatim"}
+pairs(data_train[,sis_probes[1:8]], main="pair_plot")
+paste0(sis_probes[1:8], collapse="+")
+```
+
+7. Analyze the following function. What does it do? What values can the argument `i` take?
+
+```{r model_sis_i, echo=TRUE, results="verbatim", echo=TRUE, results="verbatim"}
+model_sis_i = function(data_train, i, screening_func=siscreening) { 
+  print(paste0("model SIS ", i))
+  # independant screening on train
+  sis_res = screening_func(data_train)
+  sis_probes = rownames(sis_res)[order(sis_res$pval_fisher)]
+  # build model
+  formula = as.formula(paste0(c("age~gender",sis_probes[0:i]),collapse="+"))
+  m = lm(formula, data_train)
+  return(m)
+}
+```
+
+8. Build the models `sis_0`, `sis_1`, `sis_2`, ..., `sis_50` one after the other. Observe how the $R^2$ evolves across these models. Comment.
+
+```{r sis_n, echo=TRUE, results="hide"}
+r2_sis = c()
+for (i in 0:300) {
+ m = model_sis_i(data_train, i, screening_func=msiscreening) 
+ r2_sis = c(r2_sis, summary(m)$r.squared)
+}
+plot(0:300, r2_sis)
+```
+
+
+# 
+
+```{r}
+set.seed(1)
+data_train1 = data_train[sample(round(nrow(data_train) / 2)),]
+dim(data_train1)
+data_train2 = data_train[setdiff(rownames(data_train), rownames(data_train1)),]
+dim(data_train2)
+
+r2_sis = c()
+rmse_train1 = c()
+rmse_train2 = c()
+for (i in 0:200) {
+ m = model_sis_i(data_train1, i, screening_func=msiscreening) 
+ r2_sis = c(r2_sis, summary(m)$r.squared)
+ rmse_train1 = c(rmse_train1, sqrt(sum((data_train1$age - predict(m, data_train1))^2 / nrow(data_train1))))
+ rmse_train2 = c(rmse_train2, sqrt(sum((data_train2$age - predict(m, data_train2))^2 / nrow(data_train2))))
+}
+layout(matrix(1:2, 1), respect=TRUE)
+plot(0:200, r2_sis)
+plot(0:200, rmse_train1, col=2)
+points(0:200, rmse_train2, col=4)
+legend("topright", col=c(2.4), c("data_train1", "data_train2"), pch=1)
+
+```
+
+
+# *Step forward* method 
+
+We have just seen that not all probes bring the same amount of "new" information. We will take advantage of the *step forward* variable selection method to select the probes that bring "new" information. To do so, we start from the null model and add, one by one, the probes among the 50 best genes obtained with the SIS method that considerably improve the quality of the model.
+
+
+1. Analyze the following code. What does the `step` function do? What does the returned variable `step_probes` contain?
+
+```{r step_model, echo=TRUE, results="hide"}
+stepforward = function(data_train, sis_probes, nb_sis_probes=50, trace=0, k=2) {
+  m_lo = lm(age ~ 1, data=data_train[,c("age", sis_probes[1:nb_sis_probes])])
+  m_up = lm(age ~ ., data=data_train[,c("age", sis_probes[1:nb_sis_probes])])
+  m_fwd = step(m_lo, method="forward", scope=list(upper=m_up,lower=m_lo), trace=trace, k=k)  
+  # print(m_fwd$call)
+  step_probes = names(m_fwd$coefficients)[-1]
+}
+
+step_probes = stepforward(data_train, sis_probes, trace=1)
+step_probes
+```
+
+2. Use the `pairs` function to plot the pairwise correlations of the 8 best probes obtained with the `step` method.
+
+```{r pairs2, echo=TRUE, results="verbatim", fig.height=9}
+layout(1, respect=TRUE)
+pairs(data_train[,step_probes[1:8]], main="pair_plot")
+```
+
+3. Display the genes selected by `stepforward` on the volcano plot of the independent screening. Comment.
+
+```{r volcano2, echo=TRUE, results="verbatim"}
+layout(matrix(1:2, 1), respect=TRUE)
+plot(sis_res$beta, -log10(sis_res$pval))
+idx = step_probes
+text(sis_res[idx,]$beta, -log10(sis_res[idx,]$pval), idx, col=2)
+```
+
+
+4. Analyze the following function. What does it do? What values can the argument `i` take?
+
+```{r model_stp_i, echo=TRUE, results="verbatim"}
+model_stp_i = function(data_train, i, step_func=stepforward) { 
+  print(paste0("model step ", i))
+  # independant screening on train
+  sis_res = msiscreening(data_train)
+  sis_probes = rownames(sis_res)[order(sis_res$pval_fisher)]
+  # step
+  step_probes = step_func(data_train, sis_probes, trace=0, k=0)
+  # build model
+  formula = as.formula(paste0(c("age~1",step_probes[0:i]),collapse="+"))
+  m = lm(formula, data_train)
+  return(m)
+}
+```
+
+5. Build the models `stp_0`, `stp_1`, `stp_2`, ..., `stp_20` one after the other. Observe how the $R^2$ evolves across these models. Compare with the evolution of the $R^2$ obtained with the models `sis_0`, `sis_1`, `sis_2`, ..., `sis_50`. Comment.
+
+```{r step_n, echo=TRUE, results="verbatim"}
+r2_stp <- c()
+for(i in 0:20){
+  # m = ...
+  # r2_stp = c(r2_stp, summary(m)$r.squared)
+}
+
+# plot(0:50, r2_sis, ylim=c(0,1))
+# points(0:20, r2_stp, col=2)
+```
+
+
+
+
+
+**But where should we stop? How can we control overfitting?**
+
+
+
+
+
+
+
+
+
+
+
+# Cross-validation
+
+...
+
+# Bootstrap
+
+...
+
+
+
+
+# Appendix: *memoization*
+
+**Definition**: *In computer science, memoization is the caching of a function's return values according to its input values. The goal of this code optimization technique is to reduce the execution time of a program by remembering the values returned by a function.* 
+
+https://en.wikipedia.org/wiki/Memoization
+
+
+```{r memoise_demo, echo=TRUE, eval=FALSE}
+sis_res = siscreening(data_train)  
+msiscreening = memoise::memoise(siscreening)
+sis_res = msiscreening(data_train)  
+sis_res = msiscreening(data_train)  
+sis_res = msiscreening(data_train)  
+sis_res = msiscreening(data_train)  
+msiscreening = memoise::memoise(siscreening)
+sis_res = msiscreening(data_train)  
+sis_res = msiscreening(data_train)  
+sis_res = msiscreening(data_train)  
+```
+
+**Exercise**: predict the behavior of the following code: 
+
+```{r memoise_exo, echo=TRUE, eval=FALSE}
+sleep = Sys.sleep
+msleep = memoise::memoise(sleep)
+sleep(3)
+sleep(3)
+msleep(3)
+msleep(3)
+msleep = memoise::memoise(sleep)
+msleep(3)
+
+mrnorm = memoise::memoise(rnorm)
+rnorm(1)
+mrnorm(1)
+```
+
+**WARNING**: 
+
+  - *Memoization* relies on computing a hash key from the variables passed as arguments to the function to be memoized. If the values of these variables are too large, computing the key can take a long time. 
+  - If the function to be memoized is stochastic, the memoized function loses its stochasticity. This practice does not necessarily make sense. 
+
+
+# Session information
+
+```{r, results="verbatim"}
+sessionInfo()
+```
+
+
+

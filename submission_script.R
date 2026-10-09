@@ -178,7 +178,7 @@ sessionInfo( )
 #
 # Submit the zip submission file on the challenge in the tab `Participate`, menu `Submit / View Results` menu, sub-menu `CHALLENGE #1`, by clicking the `Submit` button after filling out some metadatas.
 #
-# On the codalab challenge web page, The *STATUS* become : 
+# On the codabench challenge web page, The *STATUS* become : 
 #   - Submitting
 #   - Submitted	
 #   - Running

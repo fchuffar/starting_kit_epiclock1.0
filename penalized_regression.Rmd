@@ -1,0 +1,600 @@
+---
+title: "Penalized Regression Introduction"
+author: "Florent Chuffart"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r, echo=FALSE, eval=TRUE}
+knitr::opts_chunk$set(collapse=TRUE, comment = "#>", fig.width=9, fig.height=6, eval=TRUE, echo=FALSE, results="hide")
+``` 
+# Simple linear regression
+
+The goal of this section is: 
+
+  - to introduce linear regression as a **statistical model** (formulation, parameters, goodness of fit)
+  - to introduce a penalized version of this model (ridge).
+  
+---
+
+
+
+
+We look for a relationship between the observed variable $Y$ and the explanatory variable $x$. 
+
+$$ Y \sim x $$
+
+The motivations can be:
+
+  - explanatory model
+  - predictive model
+  
+Application fields: chemistry, astronomy, seismology, economics, demography, epidemiology, geography, ecology, geology, physics, medicine...
+
+Historically, the linear model was developed by Ronald Aylmer Fisher, with applications in genetics and agronomy.
+
+---
+
+## Presentation of the model
+
+Consider two variables $x$ and $Y$. $Y$ is the response variable (the one being modeled) explained by the variable $x$. 
+
+**Important**: in the framework of linear models, $Y$ is *quantitative* (e.g. age, age, cg00329615...).
+
+In the case of simple linear regression, $x$ is also quantitative and the relationship between $Y$ and $x$ is an **affine** (or **linear**) function of $x$ (cf. middle-school curriculum).
+
+\begin{eqnarray}
+              \text{f : } \mathbb{R} & \rightarrow & \mathbb{R} \\
+                                 x & \rightarrow & f(x)  =  ax + b \\ 
+\end{eqnarray}
+
+**Warning**: the R function *abline* uses the formula $bx+a$! In this course we will use the notation $f(x)  = \beta_0 + \beta_1 x$
+
+
+
+```{r  echo=FALSE, results="hide"}
+data_train = readRDS("data_train.rds")
+set.seed(1)
+data_train_20 = data_train[sample(1:nrow(data_train), 20), c(1:10, which(colnames(data_train)=="cg00329615"))]
+data_train_20[,3:ncol(data_train_20)] = data_train_20[, 3:ncol(data_train_20)] * 100
+d = data_train_20
+
+
+
+
+layout(matrix(1:2, 1), respect=TRUE)
+
+plot(d$cg00329615, d$age, main="age~cg00329615", ylab="age", xlab="cg00329615 (% of meth.")
+m = lm(age~cg00329615, d)
+m$coefficients
+legend("bottomleft", c("observations", "regression line"), pch=c(1, NA), col=1:2, lty=0:1)
+abline(a=m$coefficients[[1]], b=m$coefficients[[2]], col=2) # /!\ y = b.x + a
+plot(d$cg00329615, d$age, main="age~cg00329615", ylab="age", xlab="cg00329615", ylim=c(0, 100), xlim=c(0, 100))
+abline(a=m$coefficients[[1]], b=m$coefficients[[2]], col=2) # /!\ y = b.x + a
+# points(0,m$coefficients[[1]], pch=16)
+abline(h=m$coefficients[[1]], v=0, lty=2)
+axis(4, at=m$coefficients[[1]], "beta_0")
+
+
+# segments(50, predict(m, data.frame(cg00329615=50)), 100, predict(m, data.frame(cg00329615=50)), lty=2)
+# segments(100, predict(m, data.frame(cg00329615=50)), 100, predict(m, data.frame(cg00329615=100)), lty=2)
+# text(75, predict(m, data.frame(cg00329615=50)), "50", pos=1)
+# text(100, predict(m, data.frame(cg00329615=75)), "50*beta_1", pos=4)
+
+```
+
+
+
+The $n$ observations make it possible to:
+
+  - build the model (define $\beta_0$ and $\beta_1$),
+  - quantify how well the model fits the data.
+
+
+Remarks: 
+
+  - A Gaussian linear model is used for observations that can be modeled by a normal distribution. For other distributions (Poisson, Bernoulli...), a generalized linear model (GLM) is used.
+  - Linear regression is characterized by **quantitative** explanatory variables (*e.g.*, $age \sim cg00329615$). ANOVA is characterized by **qualitative** explanatory variables (*e.g.*, $age \sim sex$).
+
+---
+
+**Example of a deterministic relationship**
+
+The temperature $x$ in degrees Celsius fully explains the temperature $y$ in degrees Fahrenheit through the relationship: $y=32 + 9/5 x$.
+
+\begin{eqnarray}
+              \text{f : } \mathbb{R} & \rightarrow & \mathbb{R} \\
+                                 x & \rightarrow & f(x)  = \beta_0 + \beta_1 x = 32 + 9/5 x \\ 
+                                 0 & \rightarrow & f(0)  = 32 \\ 
+                                 10 & \rightarrow & f(10)  = 50 \\ 
+\end{eqnarray}
+
+
+
+```{r  echo=FALSE, results="hide"}
+layout(1, respect=TRUE)
+beta_0 = 32
+beta_1 = 9/5
+d_f = -10:20
+plot(d_f, beta_0 + beta_1 * d_f, main="Température", xlab="deg. C", ylab="deg. F", col=0)
+abline(a=beta_0, b=beta_1, col=2) # /!\ y = b.x + a
+abline(v=c(0,10), h=c(32,50), lty=2)
+
+```
+
+
+
+---
+
+**Example of a stochastic relationship**
+
+
+In the case of a random variable $Y$, we need to find the line that best fits the observations, and we add a term that accounts for the non-deterministic part of the observations.
+
+$$Y   = \beta_0 + \beta_1x + \epsilon $$
+
+$$Y_i   = \beta_0 + \beta_1x_i + \epsilon_i \ \ \ \ \  \forall i \in {1, ..., n}$$
+
+
+where $\beta_0$ and $\beta_1$ are fixed but unknown real numbers, and $\epsilon_i$ is a value characterizing the individual behavior of observation $i$ (residual).
+
+Model: $$\mathbb{E} (Y|x) = \widehat Y = f(x) = \beta_0 + \beta_1 x$$
+
+For example, $x$ is cg00329615 and $Y$ is age: for a given value of cg00329615, several ages may correspond. The data are no longer aligned, but scatter around the regression line, revealing the residuals.
+
+```{r}
+layout(1, respect=TRUE)
+
+plot(d$cg00329615, d$age, main="age~cg00329615", ylab="age", xlab="cg00329615")
+m = lm(age~cg00329615, d)
+m$coefficients
+abline(a=m$coefficients[[1]], b=m$coefficients[[2]], col=2) # /!\ y = b.x + a
+arrows(d$cg00329615, d$age, d$cg00329615, d$age-m$residuals, col=adjustcolor(4, alpha.f=0.5), length=0.1)
+legend("topleft",c("E(Y)", "epsilon"), col=c(2,4), lty=1, cex=.8)
+```
+
+
+
+---
+
+## Parameter estimation
+
+**Question**: how do we estimate the parameters of the regression line?
+
+**Answer**: with the method of least squares.
+
+---
+
+**Regression line, estimation and residuals**
+
+
+
+For an individual $i$, we have:
+
+$$Y_i=\beta_0+ \beta_1 x_i + \epsilon_i$$
+ 
+$$Y_i=\widehat{\beta}_0+ \widehat{\beta}_1x_i + e_i$$
+
+$$\widehat Y_i=\widehat{\beta}_0+ \widehat{\beta}_1x_i$$
+
+$$Y_i = \widehat Y_i + e_i$$
+
+- $x_i$ is the value of the explanatory variable, $Y_i$ is the observed value of the random variable
+- $\beta_0$ and $\beta_1$ are the parameters of the model; they are unobservable (we would need access to the whole reference population)
+- $\widehat{\beta}_0$ and $\widehat{\beta}_1$ are estimators of these parameters (estimated from a sample of the reference population)
+- the random component of $Y_i$ is $\epsilon_i$ (unobservable), estimated by $e_i$ (the **residuals of the model**)
+- the value of $Y_i$ predicted by the model is $\widehat Y_i$.
+
+Most estimation methods seek a line that minimizes a function of the residuals, the best known being **ordinary least squares** (OLS).
+
+
+
+```{r echo=FALSE}
+layout(1, respect=TRUE)
+plot(d$cg00329615, d$age, main="age~cg00329615", ylab="age", xlab="cg00329615", col=adjustcolor(1, alpha.f=0.5))
+m = lm(age~cg00329615, d)
+# abline(a=m$coefficients[[1]], b=m$coefficients[[2]], col=2) # /!\ y = b.x + a
+pred = predict(m, data.frame(cg00329615=d$cg00329615))
+i = which(d$age - pred == max(d$age - pred))
+points(d$cg00329615[i], d$age[i], pch=16, col=2)
+abline(v=d$cg00329615[i], h=c(d$age[i], d$age[i]-m$residuals[i]), lty=2, col=2)
+axis(3, at=d$cg00329615[i], "xi", las=2, col=2)
+axis(4, at=c(d$age[i], d$age[i]-m$residuals[i]), c("Yi", expression(hat("Yi"))), las=2, col=2)
+abline(a=m$coefficients[[1]], b=m$coefficients[[2]], col=1) # /!\ y = b.x + a
+arrows(d$cg00329615[i], d$age[i]-m$residuals[i], d$cg00329615[i], d$age[i], col=4, length=0.1, lwd=2)
+text(d$cg00329615[i], d$age[i]-m$residuals[i]/2, "e_i", col=4, las=2, pos=2, cex=2)
+```
+
+---
+
+**Intuition behind least squares**
+
+
+For now, the regression line is unknown.
+The problem is to estimate $\beta_0$ and $\beta_1$ from a data sample.
+
+We try to determine the **regression line** that best approximates the data: 
+
+$$\widehat Y_{\beta_0, \beta_1}(x) = \widehat{\beta}_0 + \widehat{\beta}_1x$$
+
+We define the mean squared error (MQE) as the mean of the squared residuals, $MQE_{\beta_0, \beta_1} = \frac{1}{n}\sum^n_{i=1} e_{i,\beta_0, \beta_1}^2$, with:
+
+$$e_{i,\beta_0, \beta_1} = Y_i - \widehat Y_{\beta_0, \beta_1}(x_i)$$
+
+
+Remark: as a first approximation, $\beta_0$ can be estimated by the mean of the observed $Y$, *i.e.* $\overline{Y} = \frac{1}{n}\sum^n_{i=1}Y_i$. This gives a first model with $\beta_0 = \overline{Y}$ and $\beta_1 = 0$. This model is the so-called *null* model, *i.e.*, the model in which $Y$ does not depend on $x$ ($\beta_1 = 0$), $\widehat Y_{null}(x)=\overline{Y}$
+
+
+```{r echo=TRUE}
+d = data_train_20
+layout(1, respect=TRUE)
+beta_0 = mean(d$age)
+beta_1 = 0
+res =  d$age - (beta_0 + beta_1*d$cg00329615)
+mqe = sum(res^2) / length(res)
+plot(d$cg00329615, d$age, main=paste0("age~cg00329615, MQE=", round(mqe)), ylab="age", xlab="cg00329615")
+abline(a=beta_0, b=beta_1, col=2) # /!\ y = b.x + a
+arrows(d$cg00329615, d$age, d$cg00329615, d$age-res, length=0.1, col=adjustcolor(4, alpha.f=0.5))
+```
+
+```{r echo=TRUE}
+layout(matrix(1:2, 1), respect=TRUE)
+beta_0 = 100
+beta_1 = -1
+res =  d$age - (beta_0 + beta_1*d$cg00329615)
+mqe = sum(res^2) / length(res)
+plot(d$cg00329615, d$age, main=paste0("age=", signif(beta_0, 3), "+", signif(beta_1, 3), " cg00329615, MQE=", signif(mqe,3)), ylab="age", xlab="cg00329615")
+abline(a=beta_0, b=beta_1, col=2) # /!\ y = b.x + a
+arrows(d$cg00329615, d$age, d$cg00329615, d$age-res, length=0.1, col=adjustcolor(4, alpha.f=0.5))
+
+beta_0 = 90
+beta_1 = -1
+res =  d$age - (beta_0 + beta_1*d$cg00329615)
+mqe = sum(res^2) / length(res)
+plot(d$cg00329615, d$age, main=paste0("age=", signif(beta_0, 3), "+", signif(beta_1, 3), " cg00329615, MQE=", signif(mqe,3)), ylab="age", xlab="cg00329615")
+abline(a=beta_0, b=beta_1, col=2) # /!\ y = b.x + a
+arrows(d$cg00329615[res!=0], d$age[res!=0], d$cg00329615[res!=0], (d$age-res)[res!=0], length=0.1, col=adjustcolor(4, alpha.f=0.5))
+```
+
+
+
+
+```{r echo=TRUE}
+layout(1, respect=TRUE)
+results = list()
+for(beta_0 in 100:80) {
+  for(beta_1 in -seq(0,2, length.out=21)) {
+    res =  d$age - (beta_0 + beta_1*d$cg00329615)
+    mqe = sum(res^2) / length(res)
+    results[[length(results)+1]] = c(beta_0=beta_0, beta_1=beta_1, mqe=mqe)
+  }
+}
+results = as.data.frame(do.call(rbind, results))
+# plot(results$beta_0, results$beta_1, pch=16, col=colorRampPalette(c("cyan", "black", "red"))(100)[as.numeric(cut(results$mqe, breaks=quantile(results$mqe, probs=(0:100)/100), include.lowest=TRUE))])
+r = results[results$mqe==min(results$mqe),]
+beta_0 = r[["beta_0"]]
+beta_1 = r[["beta_1"]]
+res =  d$age - (beta_0 + beta_1*d$cg00329615)
+mqe = sum(res^2) / length(res)
+plot(d$cg00329615, d$age, main=paste0("age=", signif(beta_0, 3), "+", signif(beta_1, 3), " cg00329615, MQE=", signif(mqe,4)), ylab="age", xlab="cg00329615")
+abline(a=beta_0, b=beta_1, col=2) # /!\ y = b.x + a
+arrows(d$cg00329615[res!=0], d$age[res!=0], d$cg00329615[res!=0], (d$age-res)[res!=0], length=0.1, col=adjustcolor(4, alpha.f=0.5))
+```
+
+
+
+---
+
+**Method and derivation**
+
+The goal is to define estimators that minimize the sum of squared residuals (or **mean squared error**, MQE).
+
+The estimators are therefore the coordinates of the minimum of the two-variable function:
+
+$$MQE(\beta_0, \beta_1) = \frac{1}{n} \sum^{n}_{i=1} e^2_i = \frac{1}{n} \sum^{n}_{i=1} (Y_i - \widehat Y_i)^2 = \frac{1}{n} \sum^{n}_{i=1} (Y_i - \widehat\beta_0 -  \widehat\beta_1x_i)^2$$
+
+This function is called the **objective function**.
+
+
+The estimators correspond to the values that cancel the partial derivatives of this function:
+
+$$\frac{\delta MQE(\beta_0, \beta_1)}{\delta \beta_0} = -2 \sum (Y_i - \beta_0 - \beta_1x_i)$$
+$$\frac{\delta MQE(\beta_0, \beta_1)}{\delta \beta_1} = -2 \sum x_i (Y_i - \beta_0 - \beta_1x_i)$$
+
+The estimators $(\widehat\beta_0^{OLS},\widehat\beta_1^{OLS})$ are the solutions of the system of equations:
+
+\begin{equation}
+    \begin{cases}
+    -2 \sum (Y_i - \beta_0 - \beta_1x_i) = 0  \\
+    -2 \sum x_i (Y_i - \beta_0 - \beta_1x_i) = 0
+    \end{cases}\,.
+\end{equation}
+
+
+Consider the following equations: 
+
+$$(1) \sum{Y}_i = n\widehat\beta_0 + \widehat\beta_1 \sum{x_i} $$
+
+$$(2) \sum{x_iY_i} = \widehat\beta_0 \sum{x_i} + \widehat\beta_1 \sum{x^2_i}$$
+We use the usual notations for empirical means $$\overline{x}_n = \frac{1}{n}\sum{x_i} ,\ \ \ \ \ \ \overline{Y}_n = \frac{1}{n}\sum{Y_i}$$
+
+From (1): $$\widehat\beta_0 = \overline{Y}_n - \widehat\beta_1 \overline{x}_n$$
+
+From (2):
+
+\begin{eqnarray}
+\widehat\beta_1 \sum{x^2_i} & = & \sum{x_iY_i} - \widehat\beta_0 \overline{x}_n \\
+                            & = & \sum{x_iY_i} - n\overline{x}_n\overline{Y}_n + \widehat\beta_1 (\overline{x}_n)^2
+\end{eqnarray}
+
+Thus $$\widehat\beta_1 = \frac{\sum{x_iY_i} -  n\overline{x}_n\overline{Y}_n}{\sum{x_i^2} -  n(\overline{x}_n)^2}$$
+
+And since we have:
+
+\begin{eqnarray}
+\sum{(x_i-\overline{x}_n)(Y_i-\overline{Y}_n)} & = & \sum{x_iY_i} -  n\overline{x}_n\overline{Y}_n \\
+                   \sum{(x_i-\overline{x}_n)^2}   & = & \sum{x_i^2} -  n(\overline{x}_n)^2
+\end{eqnarray}
+
+We obtain: $$\widehat\beta_1 = \frac{\sum{(x_i-\overline{x}_n)(Y_i-\overline{Y}_n)}}{\sum{(x_i-\overline{x}_n)^2}}=\frac{cov(x,Y)}{var(x)}$$
+
+In practice, we compute $\widehat\beta_1$ first, then $\widehat\beta_0$.
+
+We thus obtain an estimate of the regression line, called the ordinary least squares line:
+
+$$\widehat Y(x) = \widehat\beta_0 + \widehat\beta_1x$$
+
+
+$\widehat\beta_0$ is the intercept. This parameter is not always interpretable (it depends on the meaning of $X$ and on whether $X$ is centered or not).
+
+$\widehat\beta_1$ is the slope.
+
+Beware: the OLS technique produces estimators that are sensitive to outliers.
+
+---
+
+**Implementation in R**
+
+```{r echo=TRUE, results="verbatim"}
+layout(1, respect=TRUE)
+plot(d$cg00329615, d$age, main="age~cg00329615")
+## Model
+# Y~X
+# E(Y) = b.X
+# E(Y) = b_0 + b_1.X
+# Y_i = b_0 + b_1.X_i + e_i
+m = lm(age~cg00329615, d)
+m$coefficients
+abline(a=m$coef[[1]], b=m$coef[[2]], col=2) # /!\ y = b.x + a
+# residuals
+# head(m$residuals)
+arrows(d$cg00329615, d$age, d$cg00329615, d$age-m$residuals, col=adjustcolor(4, alpha.f=0.5), length=0.1)
+legend("topleft",c("regression line", "residuals"), col=c(2,4), lty=1, cex=.8)
+beta_0 = m$coefficients[[1]]
+beta_1 = m$coefficients[[2]]
+mqe =mean(m$residuals^2)
+print(paste0("age=", signif(beta_0, 3), "+", signif(beta_1, 4), " cg00329615, MQE=", signif(mqe,3)))
+```
+
+---
+
+
+
+
+
+
+
+
+# Ridge Penalization
+
+With ordinary least squares (OLS), we look for the values $\widehat{\beta}_0$ and $\widehat{\beta}_1$ such that the sum of the squared residuals $e_i$ in the model
+
+$$Y_i=\widehat{\beta}_0+ \widehat{\beta}_1x_i + e_i$$
+
+is minimal, *i.e.*:
+
+$$(\widehat{\beta}_0, \widehat{\beta}_1) = \underset{\beta_0, \beta_1}{\arg\min} \sum_{i=1}^{n} e_i^2 = \underset{\beta_0, \beta_1}{\arg\min} \sum_{i=1}^{n} (Y_i - \beta_0 - \beta_1 x_i)^2$$
+
+
+
+In our context, with $n = 20$ observations and $p = 1$ explanatory variable, OLS works well.
+
+More generally, OLS works well when the number of observations $n$ is larger than the number of explanatory variables $p$ (*i.e.*, $n > p$).
+
+```{r}
+layout(1, respect=TRUE)
+plot(d$cg00329615, d$age, main="age~cg00329615")
+## Model
+# Y~X
+# E(Y) = b.X
+# E(Y) = b_0 + b_1.X
+# Y_i = b_0 + b_1.X_i + e_i
+m = lm(age~cg00329615, d)
+m$coefficients
+abline(a=m$coef[[1]], b=m$coef[[2]], col=2) # /!\ y = b.x + a
+# residuals
+# head(m$residuals)
+arrows(d$cg00329615, d$age, d$cg00329615, d$age-m$residuals, col=adjustcolor(4, alpha.f=0.5), length=0.1)
+legend("topleft",c("regression line", "residuals"), col=c(2,4), lty=1, cex=.8)
+beta_0 = m$coefficients[[1]]
+beta_1 = m$coefficients[[2]]
+mqe =mean(m$residuals^2)
+print(paste0("age=", signif(beta_0, 3), "+", signif(beta_1, 4), " cg00329615, MQE=", signif(mqe,3)))
+```
+
+
+
+
+
+When $n = p$ (as many observations as parameters to estimate, intercept included), the model becomes deterministic if the explanatory variables are linearly independent: the regression line passes exactly through all the observations, so every residual is zero ($e_i = 0 \ \ \forall i$) and $R^2 = 1$.
+
+For example, a simple linear regression fitted on $n = 2$ points: the line goes exactly through both points. The model has no residual degrees of freedom left, so it cannot capture any random variability, and it does not allow any statistical test (Student, Fisher).
+
+
+
+```{r}
+d = d[1:2,]
+layout(1, respect=TRUE)
+plot(d$cg00329615, d$age, main="age~cg00329615")
+## Model
+# Y~X
+# E(Y) = b.X
+# E(Y) = b_0 + b_1.X
+# Y_i = b_0 + b_1.X_i + e_i
+m = lm(age~cg00329615, d)
+m$coefficients
+abline(a=m$coef[[1]], b=m$coef[[2]], col=2) # /!\ y = b.x + a
+```
+
+
+
+
+When $n < p$ (fewer observations than explanatory variables), the situation is worse: the OLS problem has **infinitely many solutions**. The matrix $X^\top X$ (of size $p \times p$) has rank at most $n < p$, so it is singular and cannot be inverted. Many different sets of coefficients $(\beta_0, \beta_1, ..., \beta_p)$ fit the observations perfectly, with all residuals equal to zero ($e_i = 0 \ \ \forall i$), and $R^2 = 1$. Such a model **overfits**: it learns the noise of the training sample and will predict poorly on new observations.
+
+```{r}
+d = d[1,]
+layout(1, respect=TRUE)
+plot(d$cg00329615, d$age, main="age~cg00329615")
+# ## Model
+# # Y~X
+# # E(Y) = b.X
+# # E(Y) = b_0 + b_1.X
+# # Y_i = b_0 + b_1.X_i + e_i
+# m = lm(age~cg00329615, d)
+# m$coefficients
+abline(col=2, a=d$age, b=0) 
+abline(col=2, a=d$age - d$cg00329615, b=1) 
+abline(col=2, a=d$age + d$cg00329615, b=-1)
+abline(col=2, a=d$age - 2 * d$cg00329615, b=2) 
+abline(col=2, a=d$age + 2 * d$cg00329615, b=-2)
+abline(col=2, a=d$age - .5 * d$cg00329615, b= .5) 
+abline(col=2, a=d$age + .5 * d$cg00329615, b=-.5)
+```
+
+This is typically the case with the methylome: we have $p \approx 450\,000$ probes for only $600$ individuals.
+
+
+---
+
+From the model
+
+$$Y_i=\widehat{\beta}_0+ \widehat{\beta}_1x_i + e_i$$
+
+we deduce that $\widehat{\beta}_0$ and $\widehat{\beta}_1$ are linked by a linear relation. Indeed, minimizing the sum of squared residuals with respect to $\beta_0$ imposes $\sum_{i=1}^{n} e_i = 0$ (the residuals sum to zero), which gives, after dividing by $n$:
+
+$$\overline{Y}_n = \widehat{\beta}_0 + \widehat{\beta}_1 \overline{x}_n \ \ \ \Longleftrightarrow \ \ \ \widehat{\beta}_0 = \overline{Y}_n - \widehat{\beta}_1 \overline{x}_n$$
+
+
+In other words, once $\widehat{\beta}_1$ is known, $\widehat{\beta}_0$ is entirely determined. Geometrically, the OLS regression line always passes through the barycenter of the data $(\overline{x}_n, \overline{Y}_n)$.
+
+
+
+
+```{r}
+layout(1, respect=TRUE)
+plot(0, 0, col=0, xlim=c(-1.2, 0), ylim=c(40, 100), main="beta_0=age-beta_1*cg00329615", xlab="beta_1", ylab="beta_0")
+abline(col=4, a=d$age, b=-d$cg00329615) 
+```
+
+
+
+---
+
+**Ridge regression** addresses this issue by adding a penalty on the size of the coefficients to the least squares objective function:
+
+when OLS minimize: 
+
+$$(\widehat{\beta}_0, \widehat{\beta}_1) = \underset{\beta_0, \beta_1}{\arg\min} \sum_{i=1}^{n} e_i^2 = \underset{\beta_0, \beta_1}{\arg\min} \sum_{i=1}^{n} (Y_i - \beta_0 - \beta_1 x_i)^2$$
+
+**Ridge regression** minimize: 
+
+$$\underset{\beta_0, \beta_1}{\arg\min} \left\{ \sum_{i=1}^{n} \left(Y_i - \beta_0 - \beta_1 x_i\right)^2 + \lambda \sum_{j=1}^{p} \beta_j^2 \right\}$$
+
+where
+
+```{r}
+layout(1, respect=TRUE)
+plot(0, 0, col=0, xlim=c(-3, 3), ylim=c(-5, 50*beta_1), main="beta_0 = age_i - beta_1 * cg00329615_i", xlab="beta_1", ylab="beta_0")
+abline(col=4, a=d$age, b=-d$cg00329615) # one line per observation
+# OLS solution
+m = lm(age~cg00329615, d)
+points(m$coefficients[[2]], m$coefficients[[1]], pch=16)
+# ridge constraint: ellipses centered on (0,0), the larger lambda, the smaller the ellipse
+r1 = 1.2 # radius along beta_1
+r0 = 110 # radius along beta_0
+r1 = 1 # radius along beta_1
+r0 = 1 # radius along beta_0
+theta = seq(0, 2*pi, length.out=200)
+for (s in 2) {
+  lines(s*r1*cos(theta), s*r0*sin(theta), col=2, lwd=2)
+}
+points(0, 0, pch=3, col=2)
+legend("topright", c("OLS constraint", "ridge constraint"), col=c(4, 2), lty=c(1, 1))
+```
+
+
+
+More generaly : 
+
+$$\widehat{\beta}^{ridge}_\lambda = \underset{\beta_0, \beta_1, ..., \beta_p}{\arg\min} \left\{ \sum_{i=1}^{n} \left(Y_i - \beta_0 - \sum_{j=1}^{p} \beta_j x_{ij}\right)^2 + \lambda \sum_{j=1}^{p} \beta_j^2 \right\}$$
+
+where $\lambda \geq 0$ is a **hyper-parameter** controlling the strength of the penalty:
+
+  - $\lambda = 0$: no penalty, we recover the OLS estimators;
+  - $\lambda \to \infty$: all coefficients $\beta_j$ ($j \geq 1$) are shrunk towards $0$, we recover the null model.
+
+
+```{r}
+
+# ```{r}
+# layout(1, respect=TRUE)
+# plot(0, 0, col=0, ylim=c(-100, 150), xlim=c(-1.2,-1.2),main="beta_0=age-beta_1*cg00329615", xlab="beta_0", ylab="beta_1")
+# abline(col=4, a=d$age, b=-d$cg00329615) 
+```
+
+
+
+
+Each observation $i$ defines a line in the $(\beta_1, \beta_0)$ plane: the set of all pairs of parameters that fit this observation exactly ($\beta_0 = Y_i - \beta_1 x_i$). The OLS solution (black dot) is the point that is closest, in the least squares sense, to all these lines.
+
+
+Ridge regression is equivalent to minimizing the sum of squared residuals **under a constraint** on the size of the coefficients:
+
+$$\widehat{\beta}^{ridge} = \underset{\beta}{\arg\min} \sum_{i=1}^{n} e_i^2 \ \ \ \text{subject to} \ \ \ \frac{\beta_0^2}{r_0^2} + \frac{\beta_1^2}{r_1^2} \leq 1$$
+
+Geometrically, we no longer look for the point closest to all the lines anywhere in the plane, but only inside the ellipse centered on $(0, 0)$ (red). When the OLS solution lies outside the ellipse, the ridge solution is located on its boundary. The hyper-parameter $\lambda$ controls the size of the ellipse: the larger $\lambda$, the smaller the ellipse, and the more the coefficients are shrunk towards $0$ (at the cost of larger residuals). For $\lambda = 0$ the ellipse is infinitely large and we recover the OLS solution.
+
+
+
+
+
+
+
+
+
+
+
+
+The intercept $\beta_0$ is not penalized. For centered variables, the solution has an explicit form:
+
+$$\widehat{\beta}^{ridge}_\lambda = (X^\top X + \lambda I_p)^{-1} X^\top Y$$
+
+Adding $\lambda I_p$ makes the matrix invertible even when $n < p$, so the solution is unique. Since the penalty depends on the scale of the variables, the explanatory variables are usually standardized before fitting a ridge regression.
+
+
+
+
+
+# Session information
+
+```{r, results="verbatim"}
+sessionInfo()
+```
+
+
+
