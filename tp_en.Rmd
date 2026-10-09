@@ -13,7 +13,6 @@ output:
 
 ```{r, echo=FALSE, eval=TRUE}
 knitr::opts_chunk$set(collapse=TRUE, comment = "#>", fig.width=9, fig.height=6, eval=TRUE, echo=FALSE, results="hide")
-msiscreening = memoise::memoise(siscreening)
 ``` 
 
 This document presents two methods to solve the *data challenge* `expred3.0`, available here: 
@@ -93,6 +92,7 @@ siscreening = function(data_train) {
   names(r2)           = probes  
   return(data.frame(pval_fisher=pval_fisher, beta=beta, r2=r2))
 }
+msiscreening = memoise::memoise(siscreening)
 
 sis_res = siscreening(data_train)  
 head(sis_res)
